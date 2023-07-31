@@ -1,0 +1,418 @@
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{views/admin/fragments/layout}">
+
+<th:block layout:fragment="head">
+  <style>
+      .category-list > .category-row{
+        margin: 5px;
+        padding: 5px;
+        border: solid 1px;
+        border-radius: 0.5rem;
+        cursor: grab;
+      }
+
+      .category-row-hidden {
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+      }
+
+      .ghost {
+        opacity: .4;
+      }
+
+      /*.drag-sort-active {*/
+      /*  background: transparent;*/
+      /*  color: transparent;*/
+      /*  border: 1px solid;*/
+      /*}*/
+
+      .category-row:active {
+        cursor: grabbing;
+      }
+  </style>
+</th:block>
+
+<th:block layout:fragment="main">
+  <main class="main-content position-relative max-height-vh-100 h-100 border-radius-lg ">
+    <!-- Navbar -->
+    <th:block th:replace="views/admin/fragments/nav-bar :: nav"></th:block>
+    <!-- End Navbar -->
+    <div class="container-fluid py-4">
+      <div class="row">
+        <div class="col-lg-6">
+          <h4>업종 관리</h4>
+          <p>업종 리스트를 관리 할 수 있습니다.</p>
+        </div>
+      </div>
+      <div class="row mt-4">
+        <div class="col-lg-4">
+          <div class="card h-100" style="border:solid 1px;">
+            <div class="card-body">
+              <h5 class="font-weight-bolder">업종 리스트</h5>
+              <div class='category-row-hidden'></div>
+              <form method="post" name="categorySortForm" action="./category-sort">
+                <ul class="category-list">
+                  <li class="row category-row" th:each = "item, i : ${categoryList}" th:data-category-no="${item.categoryNo}">
+                    <a th:text="${item.categoryName}"></a>
+                    <input type="hidden" th:value="${item.categoryNo}" th:name="${'cateSortDtos[' + i.index + '].categoryNo'}"  />
+                    <input type="hidden" th:value="${item.categoryName}" th:name="${'cateSortDtos[' + i.index + '].categoryName'}"  />
+                    <input type="hidden" th:value="${item.sort}" th:name="${'cateSortDtos[' + i.index + '].sort'}" />
+                  </li>
+                </ul>
+              <div class="row">
+                <div class="col-4" style="margin:0 auto;width:170px;" >
+                  <button type="button" id="category-add" class="btn btn-success mb-0 ms-lg-auto me-lg-0 me-auto mt-lg-0 mt-2">추 가</button>
+                  <button type="submit" class="btn btn-primary mb-0 ms-lg-auto me-lg-0 me-auto mt-lg-0 mt-2">저 장</button>
+                </div>
+              </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-8 mt-lg-0 mt-4">
+          <form method="post" name="categoryDetailForm">
+            <div class="card">
+              <div class="card-body">
+                <h5 class="font-weight-bolder">업종 상세정보</h5>
+                <div class="row">
+                  <div class="col-12 col-sm-6">
+                    <label for="categoryName">업종명</label>
+                    <input class="form-control" type="hidden" name="categoryNo" id="categoryNo" />
+                    <input class="form-control" type="text" name="categoryName" id="categoryName" data-not-null="true" placeholder="업종명 입력" />
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col-12 col-sm-6 mt-3 mt-sm-0">
+                    <label for="categoryCode">업종 코드 <span id="code-search-result" style="font-size:10px;"></span></label>
+                    <input class="form-control" type="text" name="categoryCode" id="categoryCode" data-not-null="true" placeholder="cate00009" />
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col-3">
+                    <label for="sort">노출순서</label>
+                    <input class="form-control" type="number" name="sort" id="sort" data-not-null="true" th:value="${maxSort}" />
+                  </div>
+                </div>
+                <div class="row" style="padding-top: 20px;">
+                  <div class="col-5" >
+                    <button type="submit" class="btn btn-primary mb-0 ms-lg-auto me-lg-0 me-auto mt-lg-0 mt-2">저 장</button>
+                    <button type="button" id="category-del" class="btn btn-danger mb-0 ms-lg-auto me-lg-0 me-auto mt-lg-0 mt-2">삭 제</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+      <th:block th:replace="views/admin/fragments/footer :: footer"></th:block>
+    </div>
+  </main>
+</th:block>
+<th:block layout:fragment="body-script">
+  <!--   Core JS Files   -->
+  <script src="/assets/js/core/popper.min.js"></script>
+  <script src="/assets/js/core/bootstrap.min.js"></script>
+  <script src="/assets/js/plugins/perfect-scrollbar.min.js"></script>
+  <script src="/assets/js/plugins/smooth-scrollbar.min.js"></script>
+  <script src="/assets/js/plugins/choices.min.js"></script>
+  <script src="/assets/js/plugins/quill.min.js"></script>
+  <script src="/common/js/common.js"></script>
+  <script src="/common/js/PnJValidation.js"></script>
+  <script>
+    const cdForm = document.categoryDetailForm;
+    const csForm = document.categorySortForm;
+
+    const codeSearchResult = document.querySelector("#code-search-result");
+    const cdInput = cdForm.querySelector("#categoryCode");
+    let categoryResult = false;
+
+    const delBtn = document.querySelector("#category-del");
+    const delBtnToggle = (isDisplay = false) => {
+      if (isDisplay) {
+        delBtn.style.display = "inline-block";
+      }
+      else {
+        delBtn.style.display = "none";
+      }
+    }
+
+    delBtn.addEventListener("click", () => {
+      if (confirm("해당 카테고리를 정말 삭제 하시겠습니까?")) {
+        XMLAjax(`category/${cdForm.categoryNo.value}`, "delete", [], (data) => {
+          if (JSON.parse(data).result) {
+            alert("정상적으로 삭제 되었습니다.");
+            location.reload();
+          }
+          else {
+            alert("삭제에 실패 했습니다.");
+          }
+        });
+      }
+    });
+
+    delBtnToggle(false);
+    cdInput.addEventListener("keyup", (e) =>{
+      XMLAjax("/admin/product/category/search-code", "GET", {"code": e.target.value}, (data) => {
+        if (e.keyCode != 32) {
+          if (JSON.parse(data).result) {
+            codeSearchResult.innerHTML = '<span style="color:red;">이미 사용중인 관리 코드 입니다.</span>';
+            categoryResult = false;
+          } else {
+            codeSearchResult.innerHTML = '<span style="color:blue;">사용가능 관리 코드 입니다.</span>';
+            categoryResult = true;
+          }
+        }
+      });
+    });
+    cdInput.addEventListener("keypress", (e) =>{
+      if (e.keyCode == 32) {
+        e.preventDefault();
+      }
+    });
+
+
+    let csValidation = new PnJValidation(csForm, []);
+    csValidation.setSubmitAction((data) => {
+      XMLAjax(csForm.action, 'POST', new FormData(csForm), (data) => {
+        alert("정상적으로 저장 되었습니다.");
+      }, () => {
+        alert("저장에 실패 했습니다.");
+      });
+    });
+
+    let cdValidation = new PnJValidation(cdForm, ['#categoryName', '#categoryCode', '#sort']);
+    cdValidation.setSubmitAction(() => {
+      if (categoryResult) {
+        JSONRequest(cdForm.action, new FormData(cdForm), (data) => {
+          const responseData = JSON.parse(data);
+          const msg = (responseData.type == 'insert') ? '저장' : '수정';
+          if (responseData.result) {
+            alert(`데이터가 정상적으로 ${msg} 되었습니다.`);
+            location.reload();
+          }
+          else {
+            alert(`데이터가 정상적으로 ${msg} 되지 않았습니다.`);
+          }
+
+        },() => {
+          alert(`데이터가 정상적으로 ${msg} 되지 않았습니다.`);
+        })
+      }
+      else {
+        alert("카테고리 중복 여부를 확인해 주세요");
+        cdInput.focus();
+      }
+    })
+
+    document.querySelector("#category-add").addEventListener("click", ()=> {
+      cdForm.reset();
+      cdForm.categoryCode.removeAttribute("readonly");
+      codeSearchResult.innerHTML = "";
+      categoryResult = true;
+      delBtnToggle(false);
+    })
+
+    const list = document.querySelector('.category-list')
+    // const listHidden = document.querySelector('.category-row-hidden')
+
+    // let dragIndex, dragSource
+
+    const getMouseOffset = (evt) => {
+      const targetRect = evt.target.getBoundingClientRect()
+      const offset = {
+        x: evt.pageX - targetRect.left,
+        y: evt.pageY - targetRect.top
+      }
+      return offset
+    }
+
+    const getElementVerticalCenter = (el) => {
+      const rect = el.getBoundingClientRect()
+      return (rect.bottom - rect.top) / 2
+    }
+
+    const appendPlaceholder = (evt, idx) => {
+      evt.preventDefault()
+      if (idx === dragIndex) {
+        return
+      }
+
+      const offset = getMouseOffset(evt)
+      const middleY = getElementVerticalCenter(evt.target)
+      const placeholder = list.children[dragIndex]
+
+      // console.log(`hover on ${idx} ${offset.y > middleY ? 'bottom half' : 'top half'}`)
+      if (offset.y > middleY) {
+        list.insertBefore(evt.target, placeholder)
+      } else if (list.children[idx + 1]) {
+        list.insertBefore(evt.target.nextSibling || evt.target, placeholder)
+      }
+      return
+    }
+
+    function sortable(rootEl, onUpdate) {
+      let dragEl;
+
+      // Making all siblings movable
+      [].slice.call(rootEl.children).forEach(function (itemEl) {
+        itemEl.draggable = true;
+      });
+
+      // Function responsible for sorting
+      function _onDragOver(evt) {
+        evt.preventDefault();
+        evt.dataTransfer.dropEffect = 'move';
+        const target = evt.target;
+        if (target && target !== dragEl && (target.nodeName == 'DIV' || target.nodeName == 'LI')) {
+          // Sorting
+          const offset = getMouseOffset(evt)
+          const middleY = getElementVerticalCenter(evt.target)
+
+          if (offset.y > middleY) {
+            rootEl.insertBefore(dragEl, target.nextSibling)
+          } else {
+            rootEl.insertBefore(dragEl, target)
+          }
+        }
+      }
+
+      // End of sorting
+      function _onDragEnd(evt){
+        evt.preventDefault();
+
+        dragEl.classList.remove('ghost');
+        rootEl.removeEventListener('dragover', _onDragOver, false);
+        rootEl.removeEventListener('dragend', _onDragEnd, false);
+
+
+        // Notification about the end of sorting
+        onUpdate(dragEl);
+      }
+
+      // Sorting starts
+      rootEl.addEventListener('dragstart', function (evt){
+        dragEl = evt.target; // Remembering an element that will be moved
+
+        // Limiting the movement type
+        evt.dataTransfer.effectAllowed = 'move';
+        evt.dataTransfer.setData('Text', dragEl.textContent);
+
+
+        // Subscribing to the events at dnd
+        rootEl.addEventListener('dragover', _onDragOver, false);
+        rootEl.addEventListener('dragend', _onDragEnd, false);
+
+
+        setTimeout(function () {
+          // If this action is performed without setTimeout, then
+          // the moved object will be of this class.
+          dragEl.classList.add('ghost');
+        }, 0)
+      }, false);
+    }
+
+    // Using
+    sortable(list, function (item) {
+      const listItems = document.querySelectorAll('.category-row');
+      let sort = 1;
+      listItems.forEach(el => {
+        el.querySelector("input[name$='.sort']").value = sort;
+        sort++;
+      })
+    });
+
+    list.querySelectorAll("li").forEach(el => {
+      el.addEventListener("click", () => {
+        XMLAjax(`category/${el.getAttribute('data-category-no')}`,
+                method = 'GET',
+                {},
+                (data) => {
+                  resultData = JSON.parse(data);
+                  if (resultData.isResult) {
+                    cdForm.categoryNo.value = resultData.categoryDetail.categoryNo;
+                    cdForm.categoryName.value = resultData.categoryDetail.categoryName;
+                    cdForm.categoryCode.value = resultData.categoryDetail.categoryCode;
+                    cdForm.categoryCode.setAttribute("readonly", true);
+                    cdForm.sort.value = resultData.categoryDetail.sort;
+                    codeSearchResult.innerHTML = "";
+                    categoryResult = true;
+                    delBtnToggle(true);
+                  }
+                  else {
+                    alert("카테고리 조회에 실패했습니다.");
+                  }
+                },
+                () => {console.log("데이터 호출 에러");})
+      })
+    })
+
+    if (document.getElementById('edit-deschiption-edit')) {
+      var quill = new Quill('#edit-deschiption-edit', {
+        theme: 'snow' // Specify theme in configuration
+      });
+    };
+
+    if (document.getElementById('choices-category-edit')) {
+      var element = document.getElementById('choices-category-edit');
+      const example = new Choices(element, {
+        searchEnabled: false
+      });
+    };
+
+    if (document.getElementById('choices-color-edit')) {
+      var element = document.getElementById('choices-color-edit');
+      const example = new Choices(element, {
+        searchEnabled: false
+      });
+    };
+
+    if (document.getElementById('choices-currency-edit')) {
+      var element = document.getElementById('choices-currency-edit');
+      const example = new Choices(element, {
+        searchEnabled: false
+      });
+    };
+
+    if (document.getElementById('choices-tags-edit')) {
+      var tags = document.getElementById('choices-tags-edit');
+      const examples = new Choices(tags, {
+        removeItemButton: true
+      });
+
+      examples.setChoices(
+              [{
+                value: 'One',
+                label: 'Expired',
+                disabled: true
+              },
+                {
+                  value: 'Two',
+                  label: 'Out of Stock',
+                  selected: true
+                }
+              ],
+              'value',
+              'label',
+              false,
+      );
+    }
+  </script>
+  <!-- Kanban scripts -->
+  <script src="/assets/js/plugins/dragula/dragula.min.js"></script>
+  <script src="/assets/js/plugins/jkanban/jkanban.js"></script>
+  <script>
+    var win = navigator.platform.indexOf('Win') > -1;
+    if (win && document.querySelector('#sidenav-scrollbar')) {
+      var options = {
+        damping: '0.5'
+      }
+      Scrollbar.init(document.querySelector('#sidenav-scrollbar'), options);
+    }
+  </script>
+  <!-- Github buttons -->
+  <script async defer src="https://buttons.github.io/buttons.js"></script>
+  <!-- Control Center for Soft Dashboard: parallax effects, scripts for the example pages etc -->
+  <script src="/assets/js/soft-ui-dashboard.min.js?v=1.1.0"></script>
+</th:block>
